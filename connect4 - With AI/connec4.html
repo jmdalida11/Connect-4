@@ -1,0 +1,481 @@
+<html>
+<head>
+	<title>Connect 4</title>
+</head>
+<body>
+
+	<canvas id="mycanvas" width="700" height="500"></canvas>
+
+	<script>
+		
+		var canvas = document.getElementById("mycanvas");
+		var context = canvas.getContext("2d");
+		
+		var slots = [];
+		
+		var COL = 7;
+		var ROW = 6;
+		var connect = 4;
+		
+		var win;
+		
+		var size = 60;
+		var slotspacing = 10;
+		var boardwidth = COL  * size;
+		var boardheight = ROW * size;
+		var xoffset = canvas.width / 2 - boardwidth / 2;
+		var yoffset = canvas.height * 0.5 - boardheight * 0.5;
+		
+		var arrow = [];
+		var currentPlayer;
+		
+		var haveWinner = false;
+		
+		var choice;
+		
+		var c = 0;
+		var cd = 0;
+		
+		function init(){
+			currentPlayer = 1;
+			for(var i=0; i<ROW; i++){
+				var rowslot = [];
+				for(var j=0; j<COL; j++){
+					rowslot.push(new Slot(j*size + xoffset, i*size + yoffset, size-slotspacing, size-slotspacing));
+				}
+				slots.push(rowslot);
+			}
+			
+			for(var i=1; i<=2; i++){
+				arrow.push(new Arrow(xoffset, yoffset - size - slotspacing / 3 , size - slotspacing, size - slotspacing, i));
+			}
+			
+			//slots[4][4].piece = new Piece(slots[4][4].x, slots[4][4].y, slots[4][4].width, slots[4][4].height, 2);
+		}	
+		
+		function render(){
+		
+			context.clearRect(0,0,canvas.width,canvas.height);
+			
+			context.fillStyle = 'yellow';
+			context.fillRect(0,0,canvas.width,canvas.height);
+		
+			for(var i=0; i<ROW; i++){
+				for(var j=0; j<COL; j++){
+					slots[i][j].render(context);
+					
+				if(slots[i][j].piece != null) 
+					slots[i][j].piece.render(context);
+					
+				}
+			}
+			
+			arrow[currentPlayer-1].render(context);
+			
+			if(haveWinner){
+				c++;
+			}
+			
+			if(c > 3){
+				var p = win == 1 ? "Blue" : "Red";
+				//console.log("Player " + currentPlayer + " (" + p + ") wins!");
+				alert("Player " + win + " (" + p + ") wins!");
+				location.reload();
+			}
+			
+			if(isDraw(slots)){
+				cd++;
+			}
+			
+			if(cd > 3){
+				//console.log("Draw!");
+				alert("Draw!");
+				location.reload();
+			}
+			
+		}
+		
+		function update(){
+			if(currentPlayer == 2 && (!haveWinner || !isDraw(slots))){
+				
+				var tempslots = [];
+				
+				for(var r=0; r<ROW; r++){
+					var ts = [];
+					for(var c=0; c<COL; c++){
+						ts.push(new Slot(c*size + xoffset, r*size + yoffset, size-slotspacing, size-slotspacing));
+					}
+					tempslots.push(ts);
+				}
+				
+				for(var r=0; r<ROW; r++){
+					for(var c=0; c<COL; c++){
+						tempslots[r][c].piece = slots[r][c].piece;
+					}
+				}
+				
+				choice = minimax(tempslots, 1, 2)[1];
+				dropPiece(choice);
+				currentPlayer = 1;
+			}
+			
+		}
+		
+		
+		
+		
+		window.addEventListener('keyup', function(e){
+			
+			if(haveWinner) return;
+			if(currentPlayer != 1) return;
+			
+			if(e.keyCode == 39){
+				arrow[currentPlayer-1].x += size;
+				arrow[currentPlayer-1].position++;
+				if(arrow[currentPlayer-1].position > 6){
+					arrow[currentPlayer-1].position = 0;
+					arrow[currentPlayer-1].x = xoffset;
+				}
+			}else if(e.keyCode == 37){
+				arrow[currentPlayer-1].x -= size;
+				arrow[currentPlayer-1].position--;
+				if(arrow[currentPlayer-1].position < 0){
+					arrow[currentPlayer-1].position = 6;
+					arrow[currentPlayer-1].x = boardwidth - size + xoffset;
+				}
+			}else if(e.keyCode == 32){
+				// drop piece
+				var arrowPos = arrow[currentPlayer-1].position;
+				if(slots[0][arrowPos].piece != null) return;
+				dropPiece(arrowPos);	
+				if(!isWin(slots)[0])currentPlayer = 2;
+			}
+		}, true );
+		
+		function dropPiece(pos){
+				
+			var dropRow = 0;
+			while(slots[dropRow+1][pos].piece == null){
+				dropRow++;
+				if(dropRow+1 >= ROW) break;	
+			}
+			
+			var slotToPost = slots[dropRow][pos];
+			slotToPost.piece = new Piece(slotToPost.x, slotToPost.y, slotToPost.width, slotToPost.height, currentPlayer);
+			
+			if(isWin(slots)[0]){
+				haveWinner = true;
+				win = currentPlayer;
+			}
+		}
+		
+		function isDraw(tempslots){
+			for(var i=0; i<COL; i++){
+				if(tempslots[0][i].piece == null)
+					return false;
+			}
+			return true;
+		}
+		
+		function eval(depth, tempslots){
+			if(isWin(tempslots)[0] && isWin(tempslots)[1] == 2){
+				return 10 - depth;
+			}else if(isWin(tempslots)[0] && isWin(tempslots)[1] == 1){
+				return depth - 10;
+			}else if(isWin(tempslots)[1] == 1 && isWin(tempslots)[2] >= 2){
+				return depth - 5;
+			}else if(isWin(tempslots)[1] == 2 && isWin(tempslots)[2] >= 2){
+				return 5 - depth;
+			}
+			return 0;
+		}
+		
+		function max(score){
+			var max = 0;
+			for(var i=0; i<score.length; i++){
+				if(score[i] > score[max]){
+					max = i;
+				}
+			}
+			return max;
+		}
+		
+		function min(score){
+			var min = 0;
+			for(var i=0; i<score.length; i++){
+				if(score[i] < score[min]){
+					min = i;
+				}
+			}
+			return min;
+		}
+		
+		
+		function minimax(tempslots, depth, player){
+			
+			var bestscore;
+			var bestmove = -1;
+			
+			if(isWin(tempslots)[0] || isDraw(tempslots) || depth > 4){
+				bestscore =  eval(depth, tempslots);
+			}else{
+				
+				
+			
+				if(player == 2){
+					
+					bestscore = -Infinity;
+					
+					for(var i=0; i<COL; i++){
+						if(tempslots[0][i].piece == null){
+							
+							var state = newState(i, tempslots, player);
+							var value = minimax(state[0], depth+1, 1)[0];
+	
+							if(value > bestscore){
+								bestscore =  value;
+								bestmove = i;
+							}
+							
+							state[1].piece = null;
+						}
+					}
+					
+				}else{
+				
+				
+					bestscore = Infinity;
+					
+					for(var i=0; i<COL; i++){
+						if(tempslots[0][i].piece == null){
+						
+							var state = newState(i, tempslots, player);
+							var value = minimax(state[0], depth+1, 2)[0];
+							if(value < bestscore){
+								bestscore =  value;
+								bestmove = i;
+							}
+							state[1].piece = null;
+						}
+					}
+					
+				}
+				
+			}
+			return [bestscore,bestmove];
+			
+			
+		}
+		
+		function newState(col, tempslots, player){
+			var dropRow = 0;
+			while(tempslots[dropRow+1][col].piece == null){
+				dropRow++;
+				if(dropRow+1 >= ROW) break;	
+			}
+			
+			var slotToPost = tempslots[dropRow][col];
+			slotToPost.piece = new Piece(slotToPost.x, slotToPost.y, slotToPost.width, slotToPost.height, player);
+			return [tempslots, slotToPost];
+		}
+		
+		function isWin(tempslots){
+			var havewinning = false;
+			var id = null;
+			var hc = 0;
+			for(var row=0; row<ROW; row++){
+				for(var col=0; col<COL; col++){
+				if(tempslots[row][col].piece == null){ continue; }
+				var horizontalRight = true, diagonal1Up = true, diagonal2Up = true;
+				var horizontalLeft = true, verticalDown = true, diagonal1Down = true, diagonal2Down = true;
+				var horizontalCount = 0, verticalCount = 0, diagonal1Count = 0, diagonal2Count = 0;
+				for(var i=1; i<4;i++){
+					
+					if(col+i < COL){
+						if(tempslots[row][col+i].piece != null){
+							if(horizontalRight && tempslots[row][col+i].piece.id == tempslots[row][col].piece.id)
+								horizontalCount++;
+							else
+								horizontalRight = false;
+						}else if(tempslots[row][col+i].piece == null){
+							horizontalRight = false;
+						}
+					}
+					
+					if(col-i >= 0){
+						if(tempslots[row][col-i].piece != null){
+							if(horizontalLeft && tempslots[row][col-i].piece.id == tempslots[row][col].piece.id)
+								horizontalCount++;
+							else
+								horizontalLeft = false;
+						}else if(tempslots[row][col-i].piece == null){
+							horizontalLeft = false;
+						}
+					}
+					
+					if(row+i < ROW){
+						if(verticalDown){
+							if(tempslots[row+i][col].piece.id == tempslots[row][col].piece.id)
+								verticalCount++;
+							else
+								verticalDown = false;
+						}
+					}
+			
+					if(row+i < ROW && col+i < COL){
+						if(diagonal1Down && tempslots[row+i][col+i].piece != null){
+							if(tempslots[row+i][col+i].piece.id == tempslots[row][col].piece.id)
+								diagonal1Count++;
+							else
+								diagonal1Down = false;
+						}else{
+							diagonal1Down = false;
+						}
+					}
+					
+					if(row-i >= 0 && col-i >= 0){
+						if(diagonal1Up && tempslots[row-i][col-i].piece != null){
+							if(tempslots[row-i][col-i].piece.id == tempslots[row][col].piece.id)
+								diagonal1Count++;
+							else
+								diagonal1Up = false;
+						}else{
+							diagonal1Up = false;
+						}
+					}
+					
+					if(row+i < ROW && col-i >= 0){
+						if(diagonal2Down && tempslots[row+i][col-i].piece != null){
+							if(tempslots[row+i][col-i].piece.id == tempslots[row][col].piece.id)
+								diagonal2Count++;
+							else
+								diagonal2Down = false;
+						}else{
+							diagonal2Down = false;
+						}
+					}
+					
+					if(row-i >= 0 && col+i < COL){
+						if(diagonal2Up && tempslots[row-i][col+i].piece != null){
+							if(tempslots[row-i][col+i].piece.id == tempslots[row][col].piece.id)
+								diagonal2Count++;
+							else
+								diagonal2Up = false;
+						}else{
+							diagonal2Up = false;
+						}
+					}
+					
+					
+				}
+			
+				
+				 var hw = horizontalCount >= 3 || diagonal1Count >= 3 || diagonal2Count >= 3 || verticalCount >= 3;
+				 
+				 if(hw){
+					 havewinning = true;
+					id = tempslots[row][col].piece.id;
+					 break;
+				}else if(horizontalCount >= 2){
+					hc = horizontalCount;
+					id = tempslots[row][col].piece.id;
+				}
+				
+				}
+			}			
+			
+			return [havewinning, id, hc];
+		}
+		
+		function Arrow(x, y, width, height, id){
+			
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+			this.id = id;
+			this.image = new Image();
+				
+			this.position = 0;
+				
+			if(id == 1){
+				this.image.src = 'blue_arrow.png';
+			}else{
+				this.image.src = 'red_arrow.png';		
+			}
+			
+			this.render = function(context){
+				context.drawImage(this.image, this.x, this.y, this.width, this.height);
+			}
+			
+			this.update = function(){
+			
+			}
+			
+		}
+		
+		function Slot(x, y, width, height){
+			this.piece = null;
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+			
+			this.render = function(context){
+				context.fillStyle = 'white';
+				context.fillRect(this.x, this.y, this.width, this.height);
+			}
+			
+			this.update = function(){
+			
+			}
+			
+		}
+		
+		function Piece(x, y, width, height, id){
+			
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+			this.id = id;
+			this.image = new Image();
+		
+			if(id == 1){
+				this.image.src = 'blue.png';
+			}else{
+				this.image.src = 'red.png';		
+			}
+			
+			this.render = function(context){
+				context.drawImage(this.image, this.x, this.y, this.width, this.height);
+			}
+			
+			this.update = function(){
+				
+			}
+			
+			
+		}
+		
+		init();
+		setInterval(function(){
+			update();
+			render();
+		}, 1000/30);
+		
+		
+	</script>
+	
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
